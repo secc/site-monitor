@@ -21,7 +21,7 @@ A single run can report multiple problems; all of them are included in one alert
 When any check fails, two alerts are sent. Each channel is independent and skips gracefully if its secrets aren't configured:
 
 - **Microsoft Teams** — an Adaptive Card posted to the engineering channel via a Teams Workflows incoming webhook, with a link to the failed run.
-- **Email** — sent via Mailgun to `[redacted]` (the shared engineering inbox).
+- **Email** — sent via Mailgun to the shared engineering inbox (`ALERT_EMAIL_TO` secret).
 
 While the site is down, alerts repeat every 15 minutes until the checks pass again. That's intentional — for a small team, a repeating alert is harder to miss than a single one.
 
@@ -37,6 +37,7 @@ Add these under **Settings → Secrets and variables → Actions → New reposit
 | `TEAMS_WEBHOOK_URL` | Teams Workflows incoming webhook URL (see below) |
 | `MAILGUN_API_KEY` | A Mailgun **sending** API key (not the account password) |
 | `MAILGUN_DOMAIN` | Our verified Mailgun sending domain |
+| `ALERT_EMAIL_TO` | Destination address for email alerts (the shared engineering inbox) |
 
 `HEALTH_URL` is kept as a secret so the health page address isn't committed to source. Note this is obscurity, not security — anyone with access to Actions logs or workflow edit rights could recover it.
 

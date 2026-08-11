@@ -135,11 +135,11 @@ jobs:
         env:
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
-          ALERT_EMAIL_TO: "[redacted]"
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
           PROBLEMS: ${{ steps.health.outputs.problems }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ -z "$MAILGUN_API_KEY" ] || [ -z "$MAILGUN_DOMAIN" ]; then
+          if [ -z "$MAILGUN_API_KEY" ] || [ -z "$MAILGUN_DOMAIN" ] || [ -z "$ALERT_EMAIL_TO" ]; then
             echo "Mailgun secrets not set — skipping email alert"
             exit 0
           fi
