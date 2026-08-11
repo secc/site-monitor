@@ -1,0 +1,155 @@
+name: Site Monitor
+
+on:
+  schedule:
+    # Every 15 minutes. Note: GitHub may delay scheduled runs a few minutes under load.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {} # allows manual runs for testing
+
+env:
+  # Rock server health page (anonymously viewable) — stored as a repo secret
+  HEALTH_URL: ${{ secrets.HEALTH_URL }}
+  # Warn when the cert has fewer than this many days remaining
+  CERT_WARN_DAYS: "14"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check site health
+        id: health
+        run: |
+          set +e
+          PROBLEMS=()
+
+          if [ -z "$HEALTH_URL" ]; then
+            echo "::error::HEALTH_URL secret is not set"
+            exit 1
+          fi
+
+          # =====================================================
+          # 1. Fetch the health page
+          # =====================================================
+          HTTP_CODE=$(curl -sS -L --max-time 30 -o /tmp/health.html -w "%{http_code}" "$HEALTH_URL" 2>/tmp/curl_err.txt)
+          if [ $? -ne 0 ]; then
+            # DNS failure, TLS handshake failure (cert incident!), timeout, etc.
+            PROBLEMS+=("Request failed entirely: $(head -c 300 /tmp/curl_err.txt)")
+          else
+            if [ "$HTTP_CODE" -ge 400 ]; then
+              PROBLEMS+=("Health page returned HTTP $HTTP_CODE")
+            fi
+
+            # --- Maintenance page detection (Rock offline) ---
+            if grep -qi "currently offline for maintenance" /tmp/health.html \
+               || grep -qi "We're Updating our Website" /tmp/health.html \
+               || grep -qi "We&#39;re Updating our Website" /tmp/health.html; then
+              PROBLEMS+=("MAINTENANCE PAGE is being served — Rock is offline")
+
+            # --- Health block status ---
+            # Case-sensitive on purpose: 'Healthy' must not match inside 'Unhealthy'
+            elif grep -q "Unhealthy" /tmp/health.html; then
+              PROBLEMS+=("Health page reports UNHEALTHY")
+            elif ! grep -q "Healthy" /tmp/health.html; then
+              PROBLEMS+=("Health page did not report Healthy (unexpected content — login redirect or error page?)")
+            fi
+
+            SERVER=$(grep -oE "ROCK-[A-Z0-9]+" /tmp/health.html | head -1)
+            [ -n "$SERVER" ] && echo "Health check answered by server: $SERVER"
+          fi
+
+          # =====================================================
+          # 2. SSL certificate expiry
+          # =====================================================
+          HOST=$(echo "$HEALTH_URL" | sed -E 's~https?://~~; s~/.*~~')
+          EXPIRY=$(echo | openssl s_client -servername "$HOST" -connect "$HOST":443 2>/dev/null \
+                   | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+          if [ -z "$EXPIRY" ]; then
+            PROBLEMS+=("Could not retrieve SSL certificate (TLS handshake may be failing)")
+          else
+            EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s)
+            NOW_EPOCH=$(date +%s)
+            DAYS_LEFT=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
+            echo "Certificate expires in $DAYS_LEFT days ($EXPIRY)"
+            if [ "$DAYS_LEFT" -lt "$CERT_WARN_DAYS" ]; then
+              PROBLEMS+=("SSL certificate expires in $DAYS_LEFT days ($EXPIRY)")
+            fi
+          fi
+
+          # =====================================================
+          # Report results
+          # =====================================================
+          if [ ${#PROBLEMS[@]} -gt 0 ]; then
+            {
+              echo "problems<<EOF"
+              printf '%s\n' "${PROBLEMS[@]}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+            printf 'PROBLEM: %s\n' "${PROBLEMS[@]}"
+            exit 1
+          else
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+            echo "All checks passed."
+          fi
+
+      # ===========================================================
+      # Alert: Microsoft Teams (via Workflows incoming webhook)
+      # ===========================================================
+      - name: Send Teams alert
+        if: failure() && steps.health.outputs.failed == 'true'
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          PROBLEMS: ${{ steps.health.outputs.problems }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$TEAMS_WEBHOOK_URL" ]; then
+            echo "TEAMS_WEBHOOK_URL not set — skipping Teams alert"
+            exit 0
+          fi
+          PAYLOAD=$(jq -n --arg problems "$PROBLEMS" --arg run "$RUN_URL" '{
+            type: "message",
+            attachments: [{
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                type: "AdaptiveCard",
+                version: "1.4",
+                body: [
+                  { type: "TextBlock", text: "🚨 Site Monitor Alert", weight: "Bolder", size: "Large", color: "Attention" },
+                  { type: "TextBlock", text: $problems, wrap: true, fontType: "Monospace" }
+                ],
+                actions: [
+                  { type: "Action.OpenUrl", title: "View run", url: $run }
+                ]
+              }
+            }]
+          }')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$PAYLOAD" "$TEAMS_WEBHOOK_URL"
+
+      # ===========================================================
+      # Alert: Email via Mailgun to the shared engineering inbox
+      # ===========================================================
+      - name: Send email alert (Mailgun)
+        if: failure() && steps.health.outputs.failed == 'true'
+        env:
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
+          ALERT_EMAIL_TO: "[redacted]"
+          PROBLEMS: ${{ steps.health.outputs.problems }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$MAILGUN_API_KEY" ] || [ -z "$MAILGUN_DOMAIN" ]; then
+            echo "Mailgun secrets not set — skipping email alert"
+            exit 0
+          fi
+          curl -sS --user "api:$MAILGUN_API_KEY" \
+            "https://api.mailgun.net/v3/$MAILGUN_DOMAIN/messages" \
+            -F from="Site Monitor <site-monitor@$MAILGUN_DOMAIN>" \
+            -F to="$ALERT_EMAIL_TO" \
+            -F subject="🚨 Site Monitor Alert — Rock external site" \
+            -F text="The site monitor detected a problem:
+
+$PROBLEMS
+
+Run details: $RUN_URL"
