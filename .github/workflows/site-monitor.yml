@@ -148,8 +148,4 @@ jobs:
             -F from="Site Monitor <site-monitor@$MAILGUN_DOMAIN>" \
             -F to="$ALERT_EMAIL_TO" \
             -F subject="🚨 Site Monitor Alert — Rock external site" \
-            -F text="The site monitor detected a problem:
-
-$PROBLEMS
-
-Run details: $RUN_URL"
+            -F text="$(printf 'The site monitor detected a problem:\n\n%s\n\nRun details: %s' "$PROBLEMS" "$RUN_URL")"
