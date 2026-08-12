@@ -64,6 +64,8 @@ Nothing to configure. Once `.github/workflows/site-monitor.yml` is on the **defa
 
 GitHub's scheduler is best-effort: runs may start a few minutes after their cron time under load.
 
+> **Maintenance:** PAT for cron-job.org expires Aug 2027 — regenerate and update the cron job.
+
 ## Testing
 
 Test the alert path **now**, not during the next outage:
