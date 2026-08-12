@@ -2,11 +2,13 @@
 
 External uptime monitoring for the Rock RMS external site, built as a GitHub Actions scheduled workflow. Checks run every 5 minutes from GitHub's infrastructure (outside our Azure environment, so it can detect problems with the front door itself) and alert the team via Microsoft Teams and email when something looks wrong.
 
+All of our Rock (sub)domains serve the same health page path, so each run checks every domain listed in `HEALTH_DOMAINS` against the shared `HEALTH_PATH`. Every problem line is tagged with the domain it came from (e.g. `[rock.example.org] Health page returned HTTP 502`), and one failing domain doesn't stop checks on the rest — a single alert aggregates all problems found in the run.
+
 This exists because of an incident where an expired certificate took the external site down overnight and nobody knew until a staff member stumbled onto it.
 
 ## What it checks
 
-Each run performs these checks against the Rock server health page, in priority order:
+Each run performs these checks against the Rock server health page **on every configured domain**, in priority order:
 
 1. **Connection failure** — DNS failure, TLS handshake failure (e.g. an expired or invalid certificate), or timeout. The request never completes.
 2. **HTTP error status** — the request completes but returns a 4xx/5xx (gateway errors, app crashes).
@@ -33,13 +35,14 @@ Add these under **Settings → Secrets and variables → Actions → New reposit
 
 | Secret | Value |
 |---|---|
-| `HEALTH_URL` | Full URL of the Rock server health page (the anonymously viewable page with the Server Health block) |
+| `HEALTH_DOMAINS` | Comma-separated hostnames to check (no scheme or path), e.g. `rock.example.org, my.example.com` |
+| `HEALTH_PATH` | Path of the Rock server health page, appended to every domain (the anonymously viewable page with the Server Health block) |
 | `TEAMS_WEBHOOK_URL` | Teams Workflows incoming webhook URL (see below) |
 | `MAILGUN_API_KEY` | A Mailgun **sending** API key (not the account password) |
 | `MAILGUN_DOMAIN` | Our verified Mailgun sending domain |
 | `ALERT_EMAIL_TO` | Destination address for email alerts (the shared engineering inbox) |
 
-`HEALTH_URL` is kept as a secret so the health page address isn't committed to source. Note this is obscurity, not security — anyone with access to Actions logs or workflow edit rights could recover it.
+`HEALTH_DOMAINS` and `HEALTH_PATH` are kept as secrets so the health page addresses aren't committed to source. Note this is obscurity, not security — anyone with access to Actions logs or workflow edit rights could recover them.
 
 ### 2. Teams webhook
 
