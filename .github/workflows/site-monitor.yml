@@ -2,8 +2,8 @@ name: Site Monitor
 
 on:
   schedule:
-    # Every 15 minutes. Note: GitHub may delay scheduled runs a few minutes under load.
-    - cron: "*/15 * * * *"
+    # Every 5 minutes. Note: GitHub may delay scheduled runs a few minutes under load.
+    - cron: "*/5 * * * *"
   workflow_dispatch: {} # allows manual runs for testing
 
 env:

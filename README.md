@@ -1,6 +1,6 @@
 # Site Monitor
 
-External uptime monitoring for the Rock RMS external site, built as a GitHub Actions scheduled workflow. Checks run every 15 minutes from GitHub's infrastructure (outside our Azure environment, so it can detect problems with the front door itself) and alert the team via Microsoft Teams and email when something looks wrong.
+External uptime monitoring for the Rock RMS external site, built as a GitHub Actions scheduled workflow. Checks run every 5 minutes from GitHub's infrastructure (outside our Azure environment, so it can detect problems with the front door itself) and alert the team via Microsoft Teams and email when something looks wrong.
 
 This exists because of an incident where an expired certificate took the external site down overnight and nobody knew until a staff member stumbled onto it.
 
@@ -23,7 +23,7 @@ When any check fails, two alerts are sent. Each channel is independent and skips
 - **Microsoft Teams** — an Adaptive Card posted to the engineering channel via a Teams Workflows incoming webhook, with a link to the failed run.
 - **Email** — sent via Mailgun to the shared engineering inbox (`ALERT_EMAIL_TO` secret).
 
-While the site is down, alerts repeat every 15 minutes until the checks pass again. That's intentional — for a small team, a repeating alert is harder to miss than a single one.
+While the site is down, alerts repeat every 5 minutes until the checks pass again. That's intentional — for a small team, a repeating alert is harder to miss than a single one.
 
 ## Setup
 
@@ -57,7 +57,7 @@ The workflow calls Mailgun's HTTP API directly. If our Mailgun account is in the
 
 ### 4. Scheduling
 
-Nothing to configure. Once `.github/workflows/site-monitor.yml` is on the **default branch**, GitHub registers the cron (`*/15 * * * *`) automatically. Scheduled workflows only run from the default branch.
+Nothing to configure. Once `.github/workflows/site-monitor.yml` is on the **default branch**, GitHub registers the cron (`*/5 * * * *`) automatically. Scheduled workflows only run from the default branch.
 
 GitHub's scheduler is best-effort: runs may start a few minutes after their cron time under load.
 
@@ -80,7 +80,7 @@ Never trust an untested alert path.
 
 ## Billing note
 
-GitHub Actions is free without limits for public repos. In a **private** repo, each run bills as a full minute; at 96 runs/day that's roughly 2,900 minutes/month, which exceeds the Free plan's included 2,000 minutes. If this must live in a private repo, drop the cadence to every 30 minutes (`*/30 * * * *`, ~1,450 min/month).
+GitHub Actions is free without limits for public repos. In a **private** repo, each run bills as a full minute; at 288 runs/day that's roughly 8,600 minutes/month, far beyond the Free plan's included 2,000 minutes. If this must live in a private repo, drop the cadence to every 30 minutes (`*/30 * * * *`, ~1,450 min/month).
 
 ## Files
 
