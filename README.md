@@ -58,11 +58,16 @@ Messages post from a "Workflows" bot and cannot @-mention people — set channel
 
 The workflow calls Mailgun's HTTP API directly. If our Mailgun account is in the EU region, change the API base URL in the workflow from `api.mailgun.net` to `api.eu.mailgun.net`. The From address is `site-monitor@<MAILGUN_DOMAIN>` so alerts are easy to recognize and filter. Make sure no inbox rules on the shared mailbox route these somewhere nobody looks.
 
-### 4. Scheduling
+### 4. Scheduling (external, via cron-job.org)
 
-Nothing to configure. Once `.github/workflows/site-monitor.yml` is on the **default branch**, GitHub registers the cron automatically (every 5 minutes, offset to :x4/:x9 minutes to dodge peak scheduler congestion at round minutes). Scheduled workflows only run from the default branch.
+We deliberately do **not** use GitHub's built-in `schedule:` cron — it's best-effort and proved too inconsistent (runs delayed by many minutes or skipped under load). Instead, a [cron-job.org](https://cron-job.org) job triggers the workflow every 5 minutes through the `workflow_dispatch` REST API:
 
-GitHub's scheduler is best-effort: runs may start a few minutes after their cron time under load.
+- **URL:** `https://api.github.com/repos/secc/site-monitor/actions/workflows/site-monitor.yml/dispatches`
+- **Method:** POST
+- **Headers:** `Authorization: Bearer <PAT>`, `Accept: application/vnd.github+json`
+- **Body:** `{"ref":"main"}`
+
+The PAT is a fine-grained personal access token scoped to this repo only, with **Actions: Read and write** permission (that's the only permission `workflow_dispatch` needs).
 
 > **Maintenance:** PAT for cron-job.org expires Aug 2027 — regenerate and update the cron job.
 
@@ -77,11 +82,11 @@ Never trust an untested alert path.
 
 ## Failure modes to be aware of
 
-- **60-day auto-disable.** GitHub disables scheduled workflows in repos with no activity for 60 days. This repo will naturally sit idle, so expect this. GitHub emails a warning first and shows a re-enable banner in the Actions tab. Any commit resets the clock.
+- **60-day auto-disable: not an issue here.** GitHub disables *scheduled* workflows in repos idle for 60 days, but this workflow is triggered via `workflow_dispatch`, which is exempt. (If a `schedule:` trigger is ever added back, this becomes a concern again.)
 - **Health page must stay anonymously viewable.** If a Rock upgrade or security change resets the page's Auth settings, the monitor will start alerting with "unexpected content — login redirect or error page?" That alert means the *monitor* broke, not necessarily the site — but treat it as actionable either way, because a monitor grepping a login page is a monitor that's silently blind.
 - **Webfarm blind spot.** The health page is served by whichever backend node the Application Gateway routes the request to (the answering server name is logged in each run's output). A single sick node in the farm may go undetected until a check happens to land on it. A Rock-side health endpoint that aggregates all `WebFarmNode` statuses would close this gap.
 - **Unhealthy string assumption.** The check greps for the literal strings `Healthy` (case-sensitive, so it won't false-match inside `Unhealthy`) and `Unhealthy`. If Rock's Server Health block renders a different word in its degraded state (e.g. "Warning"), only the fallback "Healthy missing" alert would fire. Verify the block's actual unhealthy output and adjust the greps if needed.
-- **GitHub itself.** The monitor runs on GitHub Actions; if GitHub is having a bad day, checks may be delayed or skipped. There is no alert for "the monitor didn't run." Accepted trade-off at this price point.
+- **GitHub itself, and cron-job.org.** The monitor runs on GitHub Actions and is triggered by cron-job.org; if either is having a bad day, checks may be delayed or skipped. There is no alert for "the monitor didn't run." Accepted trade-off at this price point. (cron-job.org can email on failed trigger requests — enable that in the job settings for partial coverage.)
 
 ## Billing note
 

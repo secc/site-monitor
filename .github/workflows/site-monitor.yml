@@ -1,11 +1,10 @@
 name: Site Monitor
 
 on:
-  schedule:
-    # Every 5 minutes, offset to :x4/:x9 to avoid peak scheduler congestion at
-    # round minutes. GitHub may still delay scheduled runs a few minutes under load.
-    - cron: "4,9,14,19,24,29,34,39,44,49,54,59 * * * *"
-  workflow_dispatch: {} # allows manual runs for testing
+  # Triggered externally by cron-job.org calling the workflow_dispatch REST API
+  # every 5 minutes — GitHub's built-in cron scheduler proved too inconsistent.
+  # Also allows manual runs from the Actions tab.
+  workflow_dispatch: {}
 
 env:
   # Hostnames to check — comma/space/newline separated, no scheme or path
