@@ -60,7 +60,7 @@ jobs:
               # Case-sensitive on purpose: 'Healthy' must not match inside 'Unhealthy'
               elif grep -q "Unhealthy" /tmp/health.html; then
                 PROBLEMS+=("[$DOMAIN] Health page reports UNHEALTHY")
-              elif ! grep -q "HealthyTESTBROKEN" /tmp/health.html; then
+              elif ! grep -q "Healthy" /tmp/health.html; then
                 PROBLEMS+=("[$DOMAIN] Health page did not report Healthy (unexpected content — login redirect or error page?)")
               fi
 
