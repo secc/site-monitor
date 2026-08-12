@@ -57,7 +57,7 @@ The workflow calls Mailgun's HTTP API directly. If our Mailgun account is in the
 
 ### 4. Scheduling
 
-Nothing to configure. Once `.github/workflows/site-monitor.yml` is on the **default branch**, GitHub registers the cron (`*/5 * * * *`) automatically. Scheduled workflows only run from the default branch.
+Nothing to configure. Once `.github/workflows/site-monitor.yml` is on the **default branch**, GitHub registers the cron automatically (every 5 minutes, offset to :x4/:x9 minutes to dodge peak scheduler congestion at round minutes). Scheduled workflows only run from the default branch.
 
 GitHub's scheduler is best-effort: runs may start a few minutes after their cron time under load.
 
